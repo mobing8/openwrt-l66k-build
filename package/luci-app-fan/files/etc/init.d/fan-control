@@ -1,0 +1,127 @@
+#!/bin/sh /etc/rc.common
+# 温控风扇控制脚本
+# 根据 CPU 温度自动控制风扇启停
+
+START=99
+USE_PROCD=1
+
+CONFIG_FILE=/etc/config/fan
+THERMAL_ZONE=/sys/class/thermal/thermal_zone0/temp
+GPIO_BASE=/sys/class/gpio
+
+# 读取配置
+read_config() {
+    config_load fan
+    config_get enabled config enabled 1
+    config_get temp_on config temp_on 65
+    config_get temp_off config temp_off 55
+    config_get interval config interval 30
+    config_get gpio_pin config gpio 6
+    config_get active_low config active_low 1
+}
+
+# 导出 GPIO
+export_gpio() {
+    local pin=$1
+    if [ ! -d "$GPIO_BASE/gpio$pin" ]; then
+        echo "$pin" > "$GPIO_BASE/export" 2>/dev/null
+        sleep 1
+    fi
+    echo "out" > "$GPIO_BASE/gpio$pin/direction" 2>/dev/null
+}
+
+# 控制风扇
+# active_low=1: 写0=开, 写1=关
+# active_low=0: 写1=开, 写0=关
+fan_on() {
+    local pin=$1 active_low=$2
+    if [ "$active_low" = "1" ]; then
+        echo 0 > "$GPIO_BASE/gpio$pin/value" 2>/dev/null
+    else
+        echo 1 > "$GPIO_BASE/gpio$pin/value" 2>/dev/null
+    fi
+}
+
+fan_off() {
+    local pin=$1 active_low=$2
+    if [ "$active_low" = "1" ]; then
+        echo 1 > "$GPIO_BASE/gpio$pin/value" 2>/dev/null
+    else
+        echo 0 > "$GPIO_BASE/gpio$pin/value" 2>/dev/null
+    fi
+}
+
+# 读取 CPU 温度 (返回摄氏度整数)
+get_temp() {
+    if [ -f "$THERMAL_ZONE" ]; then
+        local raw=$(cat "$THERMAL_ZONE" 2>/dev/null)
+        if [ -n "$raw" ]; then
+            echo $((raw / 1000))
+            return 0
+        fi
+    fi
+    echo 0
+}
+
+# 主循环
+fan_daemon() {
+    local fan_state=0  # 0=关, 1=开
+    local last_temp=0
+
+    while true; do
+        read_config
+
+        if [ "$enabled" != "1" ]; then
+            fan_off "$gpio_pin" "$active_low"
+            fan_state=0
+            sleep "$interval"
+            continue
+        fi
+
+        export_gpio "$gpio_pin"
+        local temp=$(get_temp)
+        last_temp=$temp
+
+        if [ "$fan_state" = "0" ] && [ "$temp" -ge "$temp_on" ]; then
+            fan_on "$gpio_pin" "$active_low"
+            fan_state=1
+            logger -t fan-control "温度 ${temp}°C >= ${temp_on}°C，风扇开启"
+        elif [ "$fan_state" = "1" ] && [ "$temp" -le "$temp_off" ]; then
+            fan_off "$gpio_pin" "$active_low"
+            fan_state=0
+            logger -t fan-control "温度 ${temp}°C <= ${temp_off}°C，风扇关闭"
+        fi
+
+        sleep "$interval"
+    done
+}
+
+start_service() {
+    # 确保配置文件存在
+    if [ ! -f "$CONFIG_FILE" ]; then
+        uci set fan.config='fan'
+        uci set fan.config.enabled='1'
+        uci set fan.config.temp_on='65'
+        uci set fan.config.temp_off='55'
+        uci set fan.config.interval='30'
+        uci set fan.config.gpio='6'
+        uci set fan.config.active_low='1'
+        uci commit fan
+    fi
+
+    procd_open_instance
+    procd_set_param command /bin/sh -c "fan_daemon"
+    procd_set_param respawn
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+}
+
+stop_service() {
+    read_config
+    fan_off "$gpio_pin" "$active_low"
+}
+
+service_triggers() {
+    procd_add_reload_trigger "fan"
+}

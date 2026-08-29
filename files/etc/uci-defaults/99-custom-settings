@@ -1,0 +1,47 @@
+#!/bin/sh
+# L66K 自定义默认设置
+# 首次启动时执行
+
+# === 默认 IP: 192.168.66.1/24 ===
+uci set network.lan.ipaddr='192.168.66.1'
+uci set network.lan.netmask='255.255.255.0'
+uci set network.lan.proto='static'
+
+# === DHCP 地址池: 192.168.66.100 - 192.168.66.249 ===
+uci set dhcp.lan.start='100'
+uci set dhcp.lan.limit='150'
+uci set dhcp.lan.leasetime='12h'
+uci set dhcp.lan.dhcpv6='server'
+uci set dhcp.lan.ra='server'
+
+# === 默认语言: 简体中文 ===
+uci set luci.main.lang='zh_cn'
+
+# === 默认主题: Argon ===
+uci set luci.main.mediaurlbase='/luci-static/argon'
+
+# === 主机名 ===
+uci set system.@system[0].hostname='L66K'
+
+# === 时区: 上海 ===
+uci set system.@system[0].timezone='CST-8'
+uci set system.@system[0].zonename='Asia/Shanghai'
+
+# === 风扇控制默认配置 ===
+uci set fan.@fan[0].enabled='1' 2>/dev/null || {
+    uci set fan.config='fan'
+    uci set fan.config.enabled='1'
+    uci set fan.config.temp_on='65'
+    uci set fan.config.temp_off='55'
+    uci set fan.config.interval='30'
+    uci set fan.config.gpio='6'
+    uci set fan.config.active_low='1'
+}
+
+uci commit network
+uci commit dhcp
+uci commit luci
+uci commit system
+uci commit fan 2>/dev/null
+
+exit 0
