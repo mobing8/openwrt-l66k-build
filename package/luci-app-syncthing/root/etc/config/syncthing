@@ -1,0 +1,3 @@
+config setting 'config'
+	option enabled '0'
+	option port '8384'
