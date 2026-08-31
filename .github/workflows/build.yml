@@ -83,6 +83,8 @@ jobs:
         cd openwrt
         # 复制风扇控制包
         cp -rf ../package/luci-app-fan package/luci-app-fan
+        # 复制 syncthing 管理包（汉化版）
+        cp -rf ../package/luci-app-syncthing package/luci-app-syncthing
         # 复制 uci-defaults 自定义设置
         mkdir -p files/etc/uci-defaults
         cp -f ../files/etc/uci-defaults/99-custom-settings files/etc/uci-defaults/99-custom-settings
@@ -93,7 +95,7 @@ jobs:
         make defconfig
         echo "配置加载完成"
         echo "=== 关键包确认 ==="
-        grep -E 'CONFIG_PACKAGE_(luci-app-openclash|qmodem|luci-app-qmodem-next|luci-app-fan|luci-theme-argon|luci-i18n-base-zh-cn|sendat|kmod-usb-net-qmi-wwan)=' .config || true
+        grep -E 'CONFIG_PACKAGE_(luci-app-openclash|qmodem|luci-app-qmodem-next|luci-app-fan|luci-app-syncthing|syncthing|luci-theme-argon|luci-i18n-base-zh-cn|sendat|kmod-usb-net-qmi-wwan)=' .config || true
 
     - name: SSH debug (optional)
       if: github.event.inputs.ssh_debug == 'true'
@@ -119,6 +121,8 @@ jobs:
         cd openwrt
         echo "=== bin 目录 ==="
         find bin/ -type f -name "*.bin" -o -name "*.itb" -o -name "*.img" 2>/dev/null | head -30
+        echo "=== ipk 包 ==="
+        find bin/packages -name "*syncthing*" 2>/dev/null || echo "未找到 syncthing 包"
         echo "=== 编译日志末尾 ==="
         ls -la bin/targets/mediatek/filogic/ 2>/dev/null || echo "目标目录不存在"
 
